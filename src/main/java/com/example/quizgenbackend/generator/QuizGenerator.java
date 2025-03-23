@@ -92,14 +92,14 @@ public class QuizGenerator {
         return line;
     }
 
-    public static void generateQuizFile(String name) {
-        String filePath = String.format("src/main/java/%s.txt", name);
+    public static String generateQuizFile(String input) {
+        String name = "GeneratedQuiz";
         String outputFileName = String.format("%s.docx", name).replace("Template", "Quiz");
         String csvFileName = String.format("%s.csv", name).replace("Template", "Quiz");
 
         List<String[][]> allQuestions = new ArrayList<>();
 
-        try (Scanner file = new Scanner(new File(filePath));
+        try (Scanner file = new Scanner(input);
              XWPFDocument document = new XWPFDocument();
              FileOutputStream out = new FileOutputStream(outputFileName)) {
 
@@ -116,6 +116,7 @@ public class QuizGenerator {
 
             while (file.hasNext()) {
                 String nextLine = file.nextLine();
+                System.out.println(nextLine);
                 if (nextLine.isEmpty() || nextLine.contains("##")) continue;
 
                 if (nextLine.contains(QUESTION_PREFIX)) {
@@ -185,6 +186,7 @@ public class QuizGenerator {
             writeToCsv(csvFileName, allQuestions);
             System.out.println(String.format("%s generated successfully", outputFileName));
             System.out.println(String.format("%s generated successfully", csvFileName));
+            return name + ".docx" + "," + name + ".csv";
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
