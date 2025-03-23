@@ -3,13 +3,18 @@ package com.example.quizgenbackend.controller;
 import com.example.quizgenbackend.generator.QuizGenerator;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @CrossOrigin(origins = "http://localhost:4200")
 @RestController
@@ -21,49 +26,31 @@ public class QuizController {
         return "hi";
     }
 
-    @PostMapping("/generate/word")
-    public ResponseEntity<FileSystemResource> generateQuiz(@RequestBody Map<String, String> inputData) {
-        String input = inputData.get("input");
-        String filePaths = QuizGenerator.generateQuizFile(input);
+    @GetMapping("/generate")
+    public ResponseEntity<byte[]> generateQuiz(@RequestParam String input) {
+        System.out.println("hi");
+        // Generate in-memory DOCX and CSV files
+        Map<String, byte[]> files = QuizGenerator.generateQuizFile(input);
 
-        String[] paths = filePaths.split(",");
-        if (paths.length != 2) {
-            return ResponseEntity.internalServerError().body(null);
+        // Create ZIP in memory
+        ByteArrayOutputStream zipOutputStream = new ByteArrayOutputStream();
+        try (ZipOutputStream zipOut = new ZipOutputStream(zipOutputStream)) {
+            for (Map.Entry<String, byte[]> entry : files.entrySet()) {
+                ZipEntry zipEntry = new ZipEntry(entry.getKey());
+                zipOut.putNextEntry(zipEntry);
+                zipOut.write(entry.getValue());
+                zipOut.closeEntry();
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
 
-        File wordFile = new File(paths[0]);
-        File csvFile = new File(paths[1]);
-
-        if (!wordFile.exists() || !csvFile.exists()) {
-            return ResponseEntity.notFound().build();
-        }
+        byte[] zipBytes = zipOutputStream.toByteArray();
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + wordFile.getName())
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"quiz_files.zip\"")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(new FileSystemResource(wordFile));
-    }
+                .body(zipBytes);
 
-    @PostMapping("/generate/csv")
-    public ResponseEntity<FileSystemResource> generateQuizCSV(@RequestBody Map<String, String> inputData) {
-        String input = inputData.get("input");
-        String filePaths = QuizGenerator.generateQuizFile(input);
-
-        String[] paths = filePaths.split(",");
-        if (paths.length != 2) {
-            return ResponseEntity.internalServerError().body(null);
-        }
-
-        File wordFile = new File(paths[0]);
-        File csvFile = new File(paths[1]);
-
-        if (!wordFile.exists() || !csvFile.exists()) {
-            return ResponseEntity.notFound().build();
-        }
-
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + csvFile.getName())
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(new FileSystemResource(csvFile));
     }
 }

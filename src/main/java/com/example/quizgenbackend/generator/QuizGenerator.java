@@ -5,10 +5,8 @@ import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -40,31 +38,25 @@ public class QuizGenerator {
     }
 
     // Generates a CSV file for questions
-    public static void writeToCsv(String fileName, List<String[][]> questions) {
-        File file = new File(fileName);
+    public static String writeToCsv(List<String[][]> questions) {
+        StringWriter output = new StringWriter();
+        CSVWriter writer = new CSVWriter(output);
+
         try {
-            // create FileWriter object with file as parameter
-            FileWriter outputfile = new FileWriter(file);
-
-            // create CSVWriter object filewriter object as parameter
-            CSVWriter writer = new CSVWriter(outputfile);
-
-            for (String[][] arr: questions) {
-                for (String[] data: arr) {
+            for (String[][] arr : questions) {
+                for (String[] data : arr) {
                     writer.writeNext(data);
                 }
-
                 writer.writeNext(new String[]{});
             }
-
-            // closing writer connection
             writer.close();
+        } catch (IOException e) {
+            throw new RuntimeException("Error generating CSV", e);
         }
-        catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
+
+        return output.toString();
     }
+
 
     // Replaces variable symbols with the generated values (#R1# -> 2)
     public static String replaceVariables(String line) {
@@ -92,19 +84,14 @@ public class QuizGenerator {
         return line;
     }
 
-    public static String generateQuizFile(String input) {
-        String name = "GeneratedQuiz";
-        String outputFileName = String.format("%s.docx", name).replace("Template", "Quiz");
-        String csvFileName = String.format("%s.csv", name).replace("Template", "Quiz");
-
+    public static Map<String, byte[]> generateQuizFile(String input) {
         List<String[][]> allQuestions = new ArrayList<>();
 
         try (Scanner file = new Scanner(input);
              XWPFDocument document = new XWPFDocument();
-             FileOutputStream out = new FileOutputStream(outputFileName)) {
+             ByteArrayOutputStream docxOutput = new ByteArrayOutputStream()) {
 
             XWPFParagraph paragraph = document.createParagraph();
-
 
             String questionNumber = "";
             String executionCode = "";
@@ -116,7 +103,6 @@ public class QuizGenerator {
 
             while (file.hasNext()) {
                 String nextLine = file.nextLine();
-                System.out.println(nextLine);
                 if (nextLine.isEmpty() || nextLine.contains("##")) continue;
 
                 if (nextLine.contains(QUESTION_PREFIX)) {
@@ -130,18 +116,14 @@ public class QuizGenerator {
                     title = nextLine.substring(colonIndex + 1).trim();
                 }
 
-                System.out.println(nextLine);
                 if (nextLine.startsWith("#")) {
                     createVariables(nextLine);
                 } else if (nextLine.equals(CODE_SECTION)) {
                     mustExecute = true;
                     executionCode = readCodeSection(file);
                 } else if (nextLine.equals(CHOICES_PREFIX)) {
-                    System.out.println("Yeah choices");
                     mustExecute = true;
                     Map<String, Integer> choiceToPoints = getChoicesFromChoicesSection(file);
-
-                    // Generate Java code
                     StringBuilder code = new StringBuilder();
                     code.append("public class DynamicCode {\n")
                             .append("    public static void main(String[] args) {\n")
@@ -164,33 +146,42 @@ public class QuizGenerator {
                     code.append("        };\n\n");
 
                     code.append("        System.out.println(\"Points: \");\n")
-                        .append("        for (String point: points) {\n")
-                        .append("            System.out.println(point);\n")
-                        .append("        }\n\n")
-                        .append("        System.out.println(result);\n")
-                        .append("    }\n")
-                        .append("}\n");
+                            .append("        for (String point: points) {\n")
+                            .append("            System.out.println(point);\n")
+                            .append("        }\n\n")
+                            .append("        System.out.println(result);\n")
+                            .append("    }\n")
+                            .append("}\n");
 
                     executionCode = String.valueOf(code);
-                    System.out.println(executionCode);
                 } else if (nextLine.equals(TEXT_SECTION)) {
                     csvQuestionText = readTextSection(file, paragraph, questionNumber);
                 } else if (nextLine.contains(SOLUTION_PREFIX)) {
-                    processSolution(file, nextLine, paragraph, mustExecute, executionCode, questionType, csvFileName, csvQuestionText, allQuestions, title);
+                    processSolution(file, nextLine, paragraph, mustExecute, executionCode, questionType, csvQuestionText, allQuestions, title);
                 } else if (nextLine.contains(QUESTION_TYPE_PREFIX)) {
                     questionType = nextLine.substring(nextLine.indexOf(":") + 1).trim();
                 }
             }
 
-            document.write(out);
-            writeToCsv(csvFileName, allQuestions);
-            System.out.println(String.format("%s generated successfully", outputFileName));
-            System.out.println(String.format("%s generated successfully", csvFileName));
-            return name + ".docx" + "," + name + ".csv";
+            // Write DOCX to memory
+            document.write(docxOutput);
+
+            // Generate CSV in memory
+            String csvContent = writeToCsv(allQuestions);
+            byte[] csvBytes = csvContent.getBytes(StandardCharsets.UTF_8);
+
+            // Store both files in a map and return
+            Map<String, byte[]> fileMap = new HashMap<>();
+            fileMap.put("quiz.docx", docxOutput.toByteArray());
+            fileMap.put("quiz.csv", csvBytes);
+
+            return fileMap;
+
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Error generating files", e);
         }
     }
+
 
     private static void createVariables(String nextLine) {
         Random rand = new Random();
@@ -359,7 +350,7 @@ public class QuizGenerator {
         return null;
     }
 
-    private static void processSolution(Scanner file, String nextLine, XWPFParagraph paragraph, boolean mustExecute, String executionCode, String questionType, String csvFileName, String questionText, List<String[][]> allQuestions, String title) {
+    private static void processSolution(Scanner file, String nextLine, XWPFParagraph paragraph, boolean mustExecute, String executionCode, String questionType, String questionText, List<String[][]> allQuestions, String title) {
         questionText = formatToHtml(questionText);
 
         if (mustExecute) {
