@@ -31,6 +31,7 @@ public class QuizController {
         System.out.println("hi");
         // Generate in-memory DOCX and CSV files
         Map<String, byte[]> files = QuizGenerator.generateQuizFile(input);
+        System.out.println(files.isEmpty() + " (empty)");
 
         // Create ZIP in memory
         ByteArrayOutputStream zipOutputStream = new ByteArrayOutputStream();
