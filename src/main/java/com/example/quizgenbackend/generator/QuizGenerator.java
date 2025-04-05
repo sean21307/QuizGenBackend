@@ -1,5 +1,6 @@
 package com.example.quizgenbackend.generator;
 
+import com.example.quizgenbackend.QuizOutput;
 import com.opencsv.CSVWriter;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
@@ -84,7 +85,7 @@ public class QuizGenerator {
         return line;
     }
 
-    public static Map<String, byte[]> generateQuizFile(String input) {
+    public static QuizOutput generateQuizFile(String input) {
         List<String[][]> allQuestions = new ArrayList<>();
 
         try (Scanner file = new Scanner(input);
@@ -92,6 +93,7 @@ public class QuizGenerator {
              ByteArrayOutputStream docxOutput = new ByteArrayOutputStream()) {
 
             XWPFParagraph paragraph = document.createParagraph();
+            StringBuilder plainText = new StringBuilder();
 
             String questionNumber = "";
             String executionCode = "";
@@ -155,9 +157,9 @@ public class QuizGenerator {
 
                     executionCode = String.valueOf(code);
                 } else if (nextLine.equals(TEXT_SECTION)) {
-                    csvQuestionText = readTextSection(file, paragraph, questionNumber);
+                    csvQuestionText = readTextSection(file, paragraph, plainText, questionNumber);
                 } else if (nextLine.contains(SOLUTION_PREFIX)) {
-                    processSolution(file, nextLine, paragraph, mustExecute, executionCode, questionType, csvQuestionText, allQuestions, title);
+                    processSolution(file, nextLine, paragraph, plainText, mustExecute, executionCode, questionType, csvQuestionText, allQuestions, title);
                 } else if (nextLine.contains(QUESTION_TYPE_PREFIX)) {
                     questionType = nextLine.substring(nextLine.indexOf(":") + 1).trim();
                 }
@@ -166,16 +168,13 @@ public class QuizGenerator {
             // Write DOCX to memory
             document.write(docxOutput);
 
+            System.out.println("Generated Text:" + plainText.toString());
+
             // Generate CSV in memory
             String csvContent = writeToCsv(allQuestions);
             byte[] csvBytes = csvContent.getBytes(StandardCharsets.UTF_8);
 
-            // Store both files in a map and return
-            Map<String, byte[]> fileMap = new HashMap<>();
-            fileMap.put("quiz.docx", docxOutput.toByteArray());
-            fileMap.put("quiz.csv", csvBytes);
-
-            return fileMap;
+            return new QuizOutput(plainText.toString(), docxOutput.toByteArray(), csvBytes);
 
         } catch (IOException e) {
             throw new RuntimeException("Error generating files", e);
@@ -274,7 +273,7 @@ public class QuizGenerator {
         return executionCode.toString();
     }
 
-    private static String readTextSection(Scanner file, XWPFParagraph paragraph, String questionNumber) {
+    private static String readTextSection(Scanner file, XWPFParagraph paragraph, StringBuilder plainText, String questionNumber) {
         System.out.println("Reading text section");
         boolean setQuestionText = false;
         String csvQuestionText = "";
@@ -296,11 +295,14 @@ public class QuizGenerator {
                 XWPFRun run = paragraph.createRun();
                 run.setText(questionNumber + ". " + textLine);
                 run.addBreak();
+
+                plainText.append(textLine).append("\n");
             } else {
                 for (int i = 0; i < parts.length; i++) {
                     String part = parts[i];
                     if (true) {
                         XWPFRun run = paragraph.createRun();
+                        plainText.append(part);
                         if (part.startsWith("<b>") || part.endsWith("<b>")) {
                             part = part.replace("<b>", "").replace("</b>", "");
                             run.setBold(true);
@@ -311,11 +313,11 @@ public class QuizGenerator {
 
                         if (i == parts.length - 1) {
                             run.addBreak();
+                            plainText.append("\n");
                         }
                     }
                 }
             }
-            System.out.println("Line: " + textLine);
         }
 
         return csvQuestionText;
@@ -350,7 +352,7 @@ public class QuizGenerator {
         return null;
     }
 
-    private static void processSolution(Scanner file, String nextLine, XWPFParagraph paragraph, boolean mustExecute, String executionCode, String questionType, String questionText, List<String[][]> allQuestions, String title) {
+    private static void processSolution(Scanner file, String nextLine, XWPFParagraph paragraph, StringBuilder plainText, boolean mustExecute, String executionCode, String questionType, String questionText, List<String[][]> allQuestions, String title) {
         questionText = formatToHtml(questionText);
 
         if (mustExecute) {
@@ -395,8 +397,10 @@ public class QuizGenerator {
 
                         if (i == 0 && k == 0) {
                             run.addCarriageReturn();
+                            plainText.append("\r");
                         }
 
+                        plainText.append(part);
                         if (part.startsWith("<b>") || part.endsWith("<b>")) {
                             part = part.replace("<b>", "").replace("</b>", "");
                             run.setBold(true);
@@ -407,11 +411,14 @@ public class QuizGenerator {
 
                         if (k == parts.length - 1) {
                             run.addCarriageReturn();
+                            plainText.append("\r");
                         }
 
                         if (i == choices.length - 1) {
                             run.addBreak();
                             run.addBreak();
+                            plainText.append("\n");
+                            plainText.append("\n");
                         }
                     }
 
@@ -464,8 +471,10 @@ public class QuizGenerator {
 
                         if (i == 0 && k == 0) {
                             run.addCarriageReturn();
+                            plainText.append("\r");
                         }
 
+                        plainText.append(part);
                         if (part.startsWith("<b>") || part.endsWith("<b>")) {
                             part = part.replace("<b>", "").replace("</b>", "");
                             run.setBold(true);
@@ -476,11 +485,14 @@ public class QuizGenerator {
 
                         if (k == parts.length - 1) {
                             run.addCarriageReturn();
+                            plainText.append("\r");
                         }
 
                         if (i == solutionStringArray.length - 1) {
                             run.addBreak();
                             run.addBreak();
+                            plainText.append("\n");
+                            plainText.append("\n");
                         }
                     }
 //                    run.setText(solString);
@@ -503,6 +515,8 @@ public class QuizGenerator {
             run.setText(solution);
             run.addBreak();
             run.addBreak();
+            plainText.append(solution);
+            plainText.append("\n\n");
 
 
             // Generate CSV
