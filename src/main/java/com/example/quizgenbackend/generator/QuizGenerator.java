@@ -10,6 +10,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -95,6 +96,8 @@ public class QuizGenerator {
             XWPFParagraph paragraph = document.createParagraph();
             StringBuilder plainText = new StringBuilder();
 
+            AtomicInteger selectedIndex = new AtomicInteger(-1);
+            Boolean linkedIndices = false;
             String questionNumber = "";
             String executionCode = "";
             String questionType = "";
@@ -107,19 +110,24 @@ public class QuizGenerator {
                 String nextLine = file.nextLine();
                 if (nextLine.isEmpty() || nextLine.contains("##")) continue;
 
+                if (nextLine.contains(":Linked:")) {
+                    linkedIndices = true;
+                }
+
                 if (nextLine.contains(QUESTION_PREFIX)) {
                     int hashIndex = nextLine.indexOf("#");
                     int colonIndex = nextLine.indexOf(":");
                     questionNumber = nextLine.substring(hashIndex + 1, colonIndex);
                     executionCode = "";
                     mustExecute = false;
+                    linkedIndices = false;
                 } else if (nextLine.contains(TITLE_PREFIX)) {
                     int colonIndex = nextLine.indexOf(":");
                     title = nextLine.substring(colonIndex + 1).trim();
                 }
 
                 if (nextLine.startsWith("#")) {
-                    createVariables(nextLine);
+                    createVariables(nextLine, linkedIndices, selectedIndex);
                 } else if (nextLine.equals(CODE_SECTION)) {
                     mustExecute = true;
                     executionCode = readCodeSection(file);
@@ -182,7 +190,7 @@ public class QuizGenerator {
     }
 
 
-    private static void createVariables(String nextLine) {
+    private static void createVariables(String nextLine, Boolean linkedIndices, AtomicInteger selectedIndex) {
         Random rand = new Random();
         String variableName = nextLine.substring(1, 3);
         int colonIndex = nextLine.indexOf(":");
@@ -198,7 +206,17 @@ public class QuizGenerator {
 
             @SuppressWarnings("unchecked")
             ArrayList<String> setOptions = (ArrayList<String>) variables.get(setNum);
-            String pickedValue = setOptions.get(rand.nextInt(setOptions.size()));
+            int index = rand.nextInt(setOptions.size());
+
+            if (linkedIndices) {
+                if (selectedIndex.get() == -1) {
+                    selectedIndex.set(index);
+                } else {
+                    index = selectedIndex.get();
+                }
+            }
+
+            String pickedValue = setOptions.get(index);
             variables.put(variableName, pickedValue);
 
         } else if (sub.contains("#")) {
