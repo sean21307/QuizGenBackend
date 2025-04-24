@@ -124,6 +124,9 @@ public class QuizGenerator {
                 } else if (nextLine.contains(TITLE_PREFIX)) {
                     int colonIndex = nextLine.indexOf(":");
                     title = nextLine.substring(colonIndex + 1).trim();
+                    XWPFRun run = paragraph.createRun();
+                    run.setText("Title: " + title);
+                    run.addBreak();
                 }
 
                 if (nextLine.startsWith("#")) {
@@ -317,7 +320,7 @@ public class QuizGenerator {
                 plainText.append(textLine).append("\n");
             } else {
                 for (int i = 0; i < parts.length; i++) {
-                    String part = parts[i];
+                    String part = parts[i].replace("&nbsp;", " ");
                     if (true) {
                         XWPFRun run = paragraph.createRun();
                         plainText.append(part);
@@ -327,6 +330,9 @@ public class QuizGenerator {
                         } else {
                             run.setBold(false);
                         }
+
+                        part = part.replace("<\\/?[a-zA-Z][a-zA-Z0-9]*\\b[^>]*>", "").replace("&gt;", ">").replace("&lt;", "<").replace("</b>", "");
+                        System.out.println("HERE:" + part);
                         run.setText(part);
 
                         if (i == parts.length - 1) {

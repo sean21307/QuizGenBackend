@@ -25,11 +25,6 @@ import java.util.zip.ZipOutputStream;
 @RequestMapping("/quiz")
 public class QuizController {
 
-    @GetMapping("/hi")
-    public String test() {
-        return "hi";
-    }
-
     @PostMapping("/output")
     public ResponseEntity<String> outputQuiz(@RequestBody Map<String, String> body) {
         String input = body.get("input");
@@ -48,6 +43,7 @@ public class QuizController {
             return ResponseEntity.badRequest().body(null);
         }
 
+        System.out.println(input);
         QuizOutput output = QuizGenerator.generateQuizFile(input);
 
         ByteArrayOutputStream zipOutputStream = new ByteArrayOutputStream();
